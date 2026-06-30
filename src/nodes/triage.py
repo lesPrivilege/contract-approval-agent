@@ -15,8 +15,8 @@ def triage_node(state: ContractState) -> dict:
 
     # Rule-based: board and type are already structured in our data
     # In a real system, this would handle NLP input from user
-    known_boards = {"燃气", "综合能源", "智慧家居", "行政"}
-    known_types = {"设备采购", "供气设施安装", "运营维保", "工程施工", "能源管理", "借款担保", "社区服务"}
+    known_boards = {"A", "B", "C", "D"}
+    known_types = {"采购类", "服务类", "工程类", "担保类"}
 
     board = contract.板块
     ctype = contract.合同类型

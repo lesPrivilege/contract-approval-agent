@@ -49,8 +49,8 @@ class TestNormalRouting:
 
     def test_approval_chain(self):
         result = _run("C001")
-        assert "部门主管" in result["approval_chain"]
-        assert "分公司总经理" in result["approval_chain"]
+        assert "部门负责人" in result["approval_chain"]
+        assert "分管副总" in result["approval_chain"]
 
     def test_no_hitl(self):
         result = _run("C001")
@@ -108,7 +108,7 @@ class TestProjectBlock:
 
     def test_block_reason(self):
         result = _run("C003")
-        assert "未通过投资评审" in result["block_reason"]
+        assert "未通过评审" in result["block_reason"]
 
     def test_project_guard_failed(self):
         result = _run("C003")

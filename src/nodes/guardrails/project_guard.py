@@ -17,7 +17,7 @@ def project_guard(state: ContractState) -> dict:
     result = GuardrailResult(
         guard_name="project_guard",
         passed=approved,
-        reason=None if approved else f"关联项目 {contract.关联项目id} 未通过投资评审",
+        reason=None if approved else f"关联项目 {contract.关联项目id} 未通过评审",
     )
 
     audit = AuditEntry(

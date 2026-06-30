@@ -1,4 +1,4 @@
-"""Isolation guard — block cross-business contracts that need compliance review."""
+"""Isolation guard — block cross-segment contracts that need compliance review."""
 
 import time
 
@@ -20,7 +20,7 @@ def isolation_guard(state: ContractState) -> dict:
     result = GuardrailResult(
         guard_name="isolation_guard",
         passed=passed,
-        reason=None if passed else "跨业务合同需合规审查，已阻断",
+        reason=None if passed else "跨板块合同需合规审查，已阻断",
     )
 
     audit = AuditEntry(

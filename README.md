@@ -1,24 +1,24 @@
 # Contract Approval Agent
 
-合同审批路由 Agent —— 基于 LangGraph 的确定性审批流程 + LLM 模糊分类 + HITL 人工确认。
+合同审批路由 Agent —— LangGraph 确定性审批流程 + 条件分流 + Guardrails + HITL 人工确认。
 
 ## 这是什么
 
-一个演示项目，展示如何用 Agent 技术增强（而非替代）企业合同审批系统。
+演示项目：用 Agent 技术增强（而非替代）企业合同审批系统。
 
-**核心论点**：规则引擎覆盖标准合同审批路径；Agent 处理规则引擎做不好的场景——模糊分类、风险识别、流程引导。
+**核心论点**：规则引擎覆盖标准审批路径；Agent 处理规则引擎做不好的场景——模糊分类、风险识别、流程引导。
 
-**诚实口径**：场景设计参考了多板块企业的合同审批通用模式，数据全部虚构，Agent 实现是为学习范式自己搭建的。
+**诚实口径**：场景设计参考多板块企业合同审批的通用模式，数据全部虚构。
 
 ## 宏观逻辑
 
-### 合同审批的全流程
+### 合同审批全流程
 
 ```
 需求立项 → 合同起草 → 会签审查 → 审批决策 → 签署归档 → 履行变更
 ```
 
-本项目聚焦**审批决策**阶段——合同发起后，如何路由到正确的审批链，并在高风险节点转人工。
+本项目聚焦**审批决策**——合同发起后，如何路由到正确的审批链，并在高风险节点转人工。
 
 ### 两种系统的分工
 
@@ -68,12 +68,13 @@
 │                              ┌────────▼────────┐ │
 │                              │   Guardrails    │ │
 │                              │ · 项目评审校验   │ │
+│                              │ · 预算上限校验   │ │
 │                              │ · 跨板块隔离     │ │
 │                              └────────┬────────┘ │
 │                                       │          │
 │                              ┌────────▼────────┐ │
 │                              │      HITL      │ │
-│                              │ (大额/不可逆)   │ │
+│                              │ (大额/担保/关联) │ │
 │                              │  interrupt()   │ │
 │                              └────────┬────────┘ │
 │                                       │          │
@@ -97,104 +98,82 @@ Draft ──▶ Triaged ──▶ Retrieved ──▶ Routed ──▶ Guard Che
 | 节点 | 方式 | 为什么 |
 |------|------|--------|
 | **Triage** | 规则优先 + LLM 兜底 | 标准路径确定性，边界场景用 LLM 判断 |
+| **Clause Extraction** | LLM 结构化输出（`条款描述` 非空时） | 从自由文本抽取风险标记，低置信度触发 HITL |
 | **RAG** | 检索 SOP/模板 | SOP 是非结构化文本，适合语义检索 |
-| **Route** | 纯代码查表 | 审批矩阵是结构化数据，查表零成本 |
+| **Route** | 纯代码查表（支持成熟度分流） | 审批矩阵是结构化数据，查表零成本 |
 | **Guardrail** | 纯代码条件判断 | 规则明确，不需要 LLM |
 | **HITL** | `interrupt()` + `Command(resume=...)` | LangGraph 原生支持，状态自动保存 |
 | **Audit Log** | 代码写入 JSONL | append-only，不依赖 LLM |
 
 ## 数据设计
 
-> 所有数据均为虚构，仅用于演示 Agent 决策逻辑。板块 A-D 代表企业内不同业务板块，其中 A 为受监管型、C 为竞争性型。
+> 所有数据均为虚构。板块 A-D 代表不同业务原型：A 受监管型、B 投资驱动型、C 竞争型、D 支撑型。
 
 ### 审批权限矩阵 (`data/approval_matrix.json`)
 
 ```json
 {
-  "板块": "A",
-  "板块标记": "受监管",
-  "合同类型": "采购类",
-  "金额上限": 500000,
-  "审批链": ["部门负责人", "财务负责人", "分管副总"],
+  "板块": "B",
+  "板块标记": "投资驱动",
+  "合同类型": "投资合作类",
+  "金额上限": 999999999,
+  "要求成熟度": "high",
+  "审批链": ["投资板块负责人", "财务负责人", "分管副总"],
   "需人工确认": false
 }
 ```
 
-### 合同样本 (`data/contracts.jsonl`)
+矩阵支持三种分档维度：
+- **金额分档**：不同金额阈值对应不同审批链
+- **成熟度分流**：B 板块投资合作类按「high/low」走不同审批路径
+- **类型分档**：不同合同类型激活不同职能组合
 
-```json
-{
-  "id": "C001",
-  "test_case": "normal_routing",
-  "板块": "A",
-  "合同类型": "采购类",
-  "金额": 300000,
-  "关联项目id": "P001",
-  "发起人": "张明",
-  "说明": "标准采购，金额适中，项目已立项"
-}
-```
-
-### 四个测试场景
+### 测试场景
 
 | ID | 场景 | 合同特征 | 预期行为 |
 |----|------|----------|----------|
-| C001 | 正常审批 | 板块 A、采购类、30万、项目已立项 | 路由到审批链，自动通过 |
-| C002 | 大额 HITL | 板块 A、采购类、600万 | 路由到审批链，触发人工确认 |
-| C003 | 未立项阻断 | 板块 B、工程类、项目未评审 | Guardrail 阻断 |
-| C004 | 跨板块拦截 | 板块 B、服务类、跨板块标记 | Guardrail 阻断 |
+| C001 | 正常审批 | A、采购类、30万、项目已立项 | 路由 → 自动通过 |
+| C002 | 大额 HITL | A、采购类、600万 | 路由 → 人工确认 |
+| C003 | 未立项阻断 | B、工程类、项目未评审 | Guardrail 阻断 |
+| C004 | 跨板块拦截 | B、服务类、跨板块标记 | Guardrail 阻断 |
+| C005 | C 板块正常路由 | C、服务类、20万 | 路由 → 自动通过 |
+| C006 | D 板块担保 HITL | D、担保类、含担保条款 | 路由 → 人工确认 |
+| C007 | 成熟度分流-高 | B、投资合作类、高成熟度 | 高效链（投→财→副总）→ 自动通过 |
+| C008 | 成熟度分流-低 | B、投资合作类、低成熟度 | 审慎链（投→总→上级）→ 人工确认 |
+| C009 | 预算超额阻断 | B、工程类、项目已评审但超预算 | Guardrail 阻断（超预算上限） |
+| C010 | 关联方 HITL | A、采购类、关联方标记 | 路由 → 人工确认（关联交易增强审查） |
+| C011 | 黑名单阻断 | A、采购类、对方状态=黑名单 | counterparty_guard 拦截 |
+| C012 | LLM 条款抽取-高置信 | A、采购类、条款描述清楚 | LLM 抽取 → 高置信度 → 自动通过 |
+| C013 | LLM 条款抽取-低置信 | B、服务类、条款描述模糊 | LLM 抽取 → 低置信度 → HITL |
+| C014 | LLM 识别黑名单 | A、采购类、条款描述含黑名单 | LLM 抽取 → 对方状态=黑名单 → 拦截 |
+
+### LLM 条款抽取机制
+
+`clause_extraction_node` 在 `triage` 之后、`rag` 之前插入。当合同的 `条款描述` 字段非空时，调用 LLM 从自由文本中抽取风险标记（不可逆/担保/跨业务/关联方/对方状态）。抽取结果覆盖合同原有标记，下游 guardrail 和 HITL 基于 LLM 输出判断。
+
+**置信度机制**：LLM 返回 `confidence` 分数。`< 0.7` 时 `extraction_low_confidence=True`，触发 HITL（reason："LLM 条款抽取置信度低，需人工复核抽取结果"）。这是 LLM 自身的不确定性触发人工介入——不只是业务规则能触发 HITL。
+
+`条款描述` 为空时跳过此节点，沿用手写标记——现有确定性测试不受影响。LLM 测试需 `OPENAI_API_KEY`，无 key 时自动跳过。
 
 ## 运行
-
-### 安装
 
 ```bash
 cd contract-approval-agent
 uv sync
 cp .env.example .env
+
+uv run python main.py --list                    # 列出所有合同
+uv run python main.py --contract C001           # 正常审批
+uv run python main.py --contract C002           # HITL 中断
+uv run python main.py --contract C002 --resume approved --thread demo-C002  # 恢复
+uv run pytest tests/ -v                         # 40 passed
 ```
 
-### 列出所有合同
-
-```bash
-uv run python main.py --list
-```
-
-### 运行单个合同
-
-```bash
-uv run python main.py --contract C001  # 正常审批
-uv run python main.py --contract C002  # HITL 中断
-uv run python main.py --contract C003  # 未立项阻断
-uv run python main.py --contract C004  # 跨板块阻断
-```
-
-### HITL 恢复
-
-```bash
-# 第一步：触发中断
-uv run python main.py --contract C002
-# 输出：⏸  HITL 中断 — 等待人工审批
-
-# 第二步：人工审批后恢复
-uv run python main.py --contract C002 --resume approved --thread demo-C002
-```
-
-### 运行测试
-
-```bash
-uv run pytest tests/ -v
-```
-
-```
-17 passed
-```
-
-## 8 个「为什么」
+## 设计决策
 
 ### 为什么不用纯 Agent？
 
-纯 Agent（让 LLM 自主决定每一步）在审批场景中不可靠——审批需要确定性、可审计、可回溯。LLM 的输出是概率性的，同一个输入可能产生不同结果。用 LangGraph 的图结构把流程固化，只在需要判断力的环节（分类、风险识别）调用 LLM。
+纯 Agent（让 LLM 自主决定每一步）在审批场景中不可靠——审批需要确定性、可审计、可回溯。用图结构固化流程，只在需要判断力的环节调用 LLM。
 
 ### 为什么 LangGraph？
 
@@ -205,67 +184,48 @@ uv run pytest tests/ -v
 
 ### 为什么 Rule Engine + Agent？
 
-规则引擎处理标准路径（零成本、零幻觉），Agent 处理边界场景（需要语义理解）。两者共享同一份数据（审批矩阵、项目台账），Agent 不重复实现规则引擎已有的能力。
+规则引擎处理标准路径（零成本、零幻觉），Agent 处理边界场景（需要语义理解）。两者共享同一份数据，Agent 不重复实现规则引擎已有的能力。
 
 ### 为什么 HITL？
 
-合同审批中有些节点是**不可逆的**（签署、大额支付、对外担保）。这些节点不能让 Agent 自动执行——必须等人工确认。LangGraph 的 `interrupt()` 让这变得简单：暂停、返回 payload 给调用方、等人工决策后 `Command(resume=...)` 恢复。
+合同审批中有些节点是**不可逆的**（签署、大额支付、对外担保）。这些节点不能让 Agent 自动执行——必须等人工确认。
 
 ### 为什么 Guardrails？
 
-审批有硬约束不能靠 LLM 判断：
-1. **项目-合同耦合**：项目未通过评审，合同不得审批——这是业务规则
-2. **跨板块隔离**：受监管板块与竞争性板块之间需要数据隔离——这是合规要求
-
-Guardrail 用纯代码实现（查表 + 条件判断），输出写入 State（不抛异常），方便 tracing 和 evaluation。
+审批有硬约束不能靠 LLM 判断：项目-合同耦合、预算上限校验、跨板块隔离。Guardrail 用纯代码实现，输出写入 State，方便 tracing。
 
 ### 为什么用 Pydantic State？
 
-Graph 的所有节点共享一份 State。用 Pydantic 定义 schema 的好处：
 1. **类型安全**：IDE 自动补全，运行时自动验证
 2. **序列化**：State 可以存数据库、传给前端、写入日志
 3. **可读性**：State 的字段就是业务语义的映射
-
-### 为什么不是 MCP？
-
-MVP 阶段工具用自定义函数。MCP 是工具连接的标准协议，生产环境应该用——但 MVP 的价值是跑通流程、展示设计判断，不是展示协议集成。
-
-### 为什么使用合成数据？
-
-合规要求。所有数据均为虚构——板块名称、合同类型、人名、组织结构都是为了演示 Agent 决策逻辑而编造的，不代表任何真实企业的业务架构。数据仅覆盖四个典型分支（正常、大额、未立项、跨板块），验证 Agent 的完整行为路径。
 
 ## 项目结构
 
 ```
 contract-approval-agent/
-├── README.md              ← 你在读的这个
-├── TODO.md                ← 实现计划（Phase 0-7 已完成）
-├── pyproject.toml         ← 依赖（langgraph, langchain, pydantic）
-├── .env.example           ← 环境变量模板
-├── main.py                ← CLI 入口（--list / --contract / --resume）
+├── main.py                ← CLI 入口
 ├── src/
-│   ├── state.py           ← Pydantic State（ContractState + AuditEntry + GuardrailResult）
+│   ├── state.py           ← Pydantic State
 │   ├── graph.py           ← LangGraph 图组装（6 节点 + 条件边）
-│   ├── config.py          ← LLM Provider 配置
 │   ├── tools.py           ← 工具函数（查审批矩阵、查项目、查 SOP）
 │   └── nodes/
 │       ├── triage.py      ← 分类（规则优先）
 │       ├── rag.py         ← SOP 检索
-│       ├── route.py       ← 审批链路由（查表）
+│       ├── route.py       ← 审批链路由（含成熟度分流）
 │       ├── guardrails/
-│       │   ├── project_guard.py   ← 项目评审校验
-│       │   └── isolation_guard.py ← 跨板块隔离校验
+│       │   ├── counterparty_guard.py   ← 相对方资信校验
+│       │   ├── project_guard.py        ← 项目评审 + 预算上限校验
+│       │   └── isolation_guard.py      ← 跨板块隔离校验
 │       ├── hitl.py        ← 人工确认（interrupt/resume）
 │       └── audit_log.py   ← append-only JSONL
-├── data/                  ← 虚构数据（生成脚本在 scripts/）
+├── data/
 │   ├── approval_matrix.json
 │   ├── contracts.jsonl
 │   ├── projects.jsonl
 │   └── templates/
-├── tests/
-│   └── test_trajectories.py  ← 17 个 trajectory 测试
-└── scripts/
-    └── generate_data.py   ← 合成数据生成
+└── tests/
+    └── test_trajectories.py  ← 50 个 trajectory 测试（43 deterministic + 7 LLM）
 ```
 
 ## 参考信源

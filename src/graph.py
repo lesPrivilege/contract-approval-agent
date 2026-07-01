@@ -3,6 +3,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from src.nodes.audit_log import audit_log_node
+from src.nodes.clause_extraction import clause_extraction_node
 from src.nodes.guardrails.counterparty_guard import counterparty_guard
 from src.nodes.guardrails.isolation_guard import isolation_guard
 from src.nodes.guardrails.project_guard import project_guard
@@ -47,6 +48,7 @@ def build_graph() -> StateGraph:
 
     # Add nodes
     graph.add_node("triage", triage_node)
+    graph.add_node("clause_extraction", clause_extraction_node)
     graph.add_node("rag", rag_node)
     graph.add_node("route", route_node)
     graph.add_node("counterparty_guard", counterparty_guard)
@@ -57,7 +59,8 @@ def build_graph() -> StateGraph:
 
     # Edges
     graph.add_edge(START, "triage")
-    graph.add_edge("triage", "rag")
+    graph.add_edge("triage", "clause_extraction")
+    graph.add_edge("clause_extraction", "rag")
     graph.add_edge("rag", "route")
 
     # After route: guardrails chain

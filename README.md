@@ -10,6 +10,8 @@
 
 **诚实口径**：场景设计参考多板块企业合同审批的通用模式，数据全部虚构。
 
+> **配套项目**：本项目是三个项目之一——`compliance-review-agent`（合规审查，RAG+推理）展示知识密集型场景的互补架构，`agent-quality-workbench`（PM 侧评估工具）提供立项评分和跨 agent 质量仪表盘。
+
 ## 宏观逻辑
 
 ### 合同审批全流程
@@ -151,7 +153,7 @@ Draft ──▶ Triaged ──▶ Retrieved ──▶ Routed ──▶ Guard Che
 
 `clause_extraction_node` 在 `triage` 之后、`rag` 之前插入。当合同的 `条款描述` 字段非空时，调用 LLM 从自由文本中抽取风险标记（不可逆/担保/跨业务/关联方/对方状态）。抽取结果覆盖合同原有标记，下游 guardrail 和 HITL 基于 LLM 输出判断。
 
-**置信度机制**：LLM 返回 `confidence` 分数。`< 0.7` 时 `extraction_low_confidence=True`，触发 HITL（reason："LLM 条款抽取置信度低，需人工复核抽取结果"）。这是 LLM 自身的不确定性触发人工介入——不只是业务规则能触发 HITL。
+**置信度机制**：LLM 返回 `confidence` 分数。`< 0.8` 时 `extraction_low_confidence=True`，触发 HITL（reason："LLM 条款抽取置信度低，需人工复核抽取结果"）。这是 LLM 自身的不确定性触发人工介入——不只是业务规则能触发 HITL。阈值从初始 0.7 上调至 0.8，因为 subagent 验证发现 C013（条款模糊样本）的置信度为 0.75——高于 0.7 不会被拦截，但这类中等模糊的条款确实应该触发人工复核。
 
 `条款描述` 为空时跳过此节点，沿用手写标记——现有确定性测试不受影响。LLM 测试需 `OPENAI_API_KEY`，无 key 时自动跳过。
 
@@ -166,7 +168,7 @@ uv run python main.py --list                    # 列出所有合同
 uv run python main.py --contract C001           # 正常审批
 uv run python main.py --contract C002           # HITL 中断
 uv run python main.py --contract C002 --resume approved --thread demo-C002  # 恢复
-uv run pytest tests/ -v                         # 40 passed
+uv run pytest tests/ -v                         # 43 passed, 7 skipped
 ```
 
 ## 设计决策

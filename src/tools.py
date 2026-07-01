@@ -39,22 +39,29 @@ def _load_templates() -> dict[str, str]:
     return _templates
 
 
-def get_approval_chain(board: str, contract_type: str, amount: int) -> list[str] | None:
+def get_approval_chain(board: str, contract_type: str, amount: int, maturity: str | None = None) -> list[str] | None:
     """Look up approval chain from matrix. Returns chain or None if not found."""
     matrix = _load_approval_matrix()
-    # Find matching entries, sorted by amount threshold
+    # Find matching entries
     candidates = [
         e for e in matrix
         if e["板块"] == board and e["合同类型"] == contract_type
     ]
     if not candidates:
         return None
+    # Filter by maturity: if candidate has "要求成熟度", it must match; otherwise pass
+    maturity_matched = [
+        e for e in candidates
+        if "要求成熟度" not in e or e["要求成熟度"] == maturity
+    ]
+    # Use maturity-matched candidates if any; otherwise fall back to all candidates
+    pool = maturity_matched if maturity_matched else candidates
     # Pick the entry whose amount上限 covers this amount
-    for entry in sorted(candidates, key=lambda e: e["金额上限"]):
+    for entry in sorted(pool, key=lambda e: e["金额上限"]):
         if amount <= entry["金额上限"]:
             return entry["审批链"]
     # Fallback: use the highest threshold entry
-    return sorted(candidates, key=lambda e: e["金额上限"])[-1]["审批链"]
+    return sorted(pool, key=lambda e: e["金额上限"])[-1]["审批链"]
 
 
 def check_project_approved(project_id: str | None) -> bool:
@@ -68,6 +75,17 @@ def check_project_approved(project_id: str | None) -> bool:
     return project.get("已评审通过", False)
 
 
+def get_project_budget(project_id: str | None) -> int | None:
+    """Get project budget ceiling. Returns None if no project linked or not found."""
+    if project_id is None:
+        return None
+    projects = _load_projects()
+    project = projects.get(project_id)
+    if project is None:
+        return None
+    return project.get("预算上限")
+
+
 def check_cross_business(contract: dict) -> bool:
     """Check if contract crosses business boundaries."""
     return contract.get("条款标记", {}).get("跨业务", False)
@@ -79,16 +97,22 @@ def get_sop(contract_type: str) -> str | None:
     return templates.get(contract_type)
 
 
-def needs_hitl(board: str, contract_type: str, amount: int) -> bool:
+def needs_hitl(board: str, contract_type: str, amount: int, maturity: str | None = None) -> bool:
     """Check if contract requires human-in-the-loop approval."""
     matrix = _load_approval_matrix()
     candidates = [
         e for e in matrix
         if e["板块"] == board and e["合同类型"] == contract_type
     ]
-    for entry in sorted(candidates, key=lambda e: e["金额上限"]):
+    # Filter by maturity
+    maturity_matched = [
+        e for e in candidates
+        if "要求成熟度" not in e or e["要求成熟度"] == maturity
+    ]
+    pool = maturity_matched if maturity_matched else candidates
+    for entry in sorted(pool, key=lambda e: e["金额上限"]):
         if amount <= entry["金额上限"]:
             return entry.get("需人工确认", False)
-    if candidates:
-        return sorted(candidates, key=lambda e: e["金额上限"])[-1].get("需人工确认", False)
+    if pool:
+        return sorted(pool, key=lambda e: e["金额上限"])[-1].get("需人工确认", False)
     return False

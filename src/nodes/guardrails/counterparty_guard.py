@@ -10,7 +10,7 @@ def counterparty_guard(state: ContractState) -> dict:
     start = time.time()
     contract = state.contract
 
-    status = contract.条款标记.get("对方状态", "正常")
+    status = contract.对方状态
     passed = status not in ("黑名单", "资信不良")
 
     result = GuardrailResult(

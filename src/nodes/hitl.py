@@ -14,13 +14,15 @@ def hitl_node(state: ContractState) -> dict:
     contract = state.contract
 
     # Check if this contract needs human approval
-    required = needs_hitl(contract.板块, contract.合同类型, contract.金额)
+    required = needs_hitl(contract.板块, contract.合同类型, contract.金额, contract.合同成熟度)
 
     # Also check for irreversible clauses
     has_irreversible = contract.条款标记.get("不可逆", False)
     has_guarantee = contract.条款标记.get("担保", False)
+    has_related_party = contract.关联方标记
+    low_confidence = state.extraction_low_confidence
 
-    if required or has_irreversible or has_guarantee:
+    if required or has_irreversible or has_guarantee or has_related_party or low_confidence:
         # Build reason
         reasons = []
         if required:
@@ -29,6 +31,10 @@ def hitl_node(state: ContractState) -> dict:
             reasons.append("包含不可撤销条款")
         if has_guarantee:
             reasons.append("包含担保条款")
+        if has_related_party:
+            reasons.append("关联交易需增强审查（法务+财务会签）")
+        if low_confidence:
+            reasons.append("LLM 条款抽取置信度低，需人工复核抽取结果")
         reason = "; ".join(reasons)
 
         # Build payload for human reviewer

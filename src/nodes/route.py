@@ -11,7 +11,7 @@ def route_node(state: ContractState) -> dict:
     start = time.time()
     contract = state.contract
 
-    chain = get_approval_chain(contract.板块, contract.合同类型, contract.金额)
+    chain = get_approval_chain(contract.板块, contract.合同类型, contract.金额, contract.合同成熟度)
     if chain is None:
         chain = ["（未找到匹配的审批链）"]
 

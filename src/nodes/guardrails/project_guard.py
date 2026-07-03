@@ -8,11 +8,11 @@ from src.tools import check_project_approved, get_project_budget
 
 def project_guard(state: ContractState) -> dict:
     """Check if the linked project has been approved and contract is within budget."""
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     approved = check_project_approved(contract.关联项目id)
-    duration = int((time.time() - start) * 1000)
+    duration = max(1, int((time.perf_counter() - start) * 1000))
 
     if not approved:
         result = GuardrailResult(

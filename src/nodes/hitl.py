@@ -10,7 +10,7 @@ from src.tools import needs_hitl
 
 def hitl_node(state: ContractState) -> dict:
     """Check if HITL is needed; if so, pause and wait for human decision."""
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     # Check if this contract needs human approval
@@ -52,7 +52,7 @@ def hitl_node(state: ContractState) -> dict:
         # Pause — this returns when human resumes with Command(resume=...)
         decision = interrupt(payload)
 
-        duration = int((time.time() - start) * 1000)
+        duration = max(1, int((time.perf_counter() - start) * 1000))
 
         audit = AuditEntry(
             node="hitl",
@@ -79,7 +79,7 @@ def hitl_node(state: ContractState) -> dict:
             }
     else:
         # No HITL needed — auto-approve
-        duration = int((time.time() - start) * 1000)
+        duration = max(1, int((time.perf_counter() - start) * 1000))
 
         audit = AuditEntry(
             node="hitl",

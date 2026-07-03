@@ -7,7 +7,7 @@ from src.state import AuditEntry, ContractState, ContractStatus, GuardrailResult
 
 def counterparty_guard(state: ContractState) -> dict:
     """Check if counterparty is blacklisted or has poor credit."""
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     status = contract.对方状态
@@ -25,7 +25,7 @@ def counterparty_guard(state: ContractState) -> dict:
         input_summary=f"对方状态: {status}",
         output_summary="通过" if passed else f"阻断: {status}",
         decision="passed" if passed else "blocked",
-        duration_ms=int((time.time() - start) * 1000),
+        duration_ms=max(1, int((time.perf_counter() - start) * 1000)),
     )
 
     updates = {

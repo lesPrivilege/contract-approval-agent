@@ -8,11 +8,11 @@ from src.tools import check_cross_business
 
 def isolation_guard(state: ContractState) -> dict:
     """Check if contract crosses regulated business boundaries."""
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     is_cross = check_cross_business(contract.model_dump())
-    duration = int((time.time() - start) * 1000)
+    duration = max(1, int((time.perf_counter() - start) * 1000))
 
     # Cross-business contracts need compliance review — block for demo
     passed = not is_cross

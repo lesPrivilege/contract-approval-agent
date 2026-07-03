@@ -8,14 +8,14 @@ from src.tools import get_approval_chain
 
 def route_node(state: ContractState) -> dict:
     """Look up the approval chain for this contract."""
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     chain = get_approval_chain(contract.板块, contract.合同类型, contract.金额, contract.合同成熟度)
     if chain is None:
         chain = ["（未找到匹配的审批链）"]
 
-    duration = int((time.time() - start) * 1000)
+    duration = max(1, int((time.perf_counter() - start) * 1000))
 
     audit = AuditEntry(
         node="route",

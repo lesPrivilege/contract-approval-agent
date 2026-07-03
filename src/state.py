@@ -36,6 +36,9 @@ class AuditEntry(BaseModel):
     output_summary: str
     decision: str
     duration_ms: int = 0
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 class ContractInfo(BaseModel):
@@ -60,6 +63,14 @@ class ClauseExtraction(BaseModel):
     跨业务: bool
     关联方标记: bool
     对方状态: Literal["正常", "资信不良", "黑名单"]
+    confidence: float
+    reasoning: str
+
+
+class TriageClassification(BaseModel):
+    """LLM structured output for fallback contract classification."""
+    板块: Literal["A", "B", "C", "D"]
+    合同类型: Literal["采购类", "服务类", "工程类", "担保类", "投资合作类"]
     confidence: float
     reasoning: str
 

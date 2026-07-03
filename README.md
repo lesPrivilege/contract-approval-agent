@@ -1,12 +1,12 @@
 # Contract Approval Agent
 
-合同审批路由 Agent —— LangGraph 确定性审批流程 + 条件分流 + Guardrails + HITL 人工确认。
+合同审批路由 Agent：结构化决策 + 分层防御。
 
 ## 这是什么
 
 演示项目：用 Agent 技术增强（而非替代）企业合同审批系统。
 
-**核心论点**：规则引擎覆盖标准审批路径；Agent 处理规则引擎做不好的场景——模糊分类、风险识别、流程引导。
+**核心论点**：合同审批路由 Agent：结构化决策 + 分层防御。核心判断抽象为 model-tool loop，LangGraph 状态图是编排外壳；防御分三层——LLM 置信度阈值（< 0.8 转人工）、三道纯代码护栏（相对方黑名单 / 项目预算上限 / 跨板块隔离）、HITL 兜底。机器能判断的自动判断，没把握的转人工，风险合同自动拦截。
 
 **诚实口径**：场景设计参考多板块企业合同审批的通用模式，数据全部虚构。
 
@@ -63,8 +63,8 @@
 │                LangGraph 图                       │
 │                                                  │
 │  ┌─────────┐    ┌─────────┐    ┌──────────────┐ │
-│  │ Triage  │───▶│  RAG    │───▶│    Route     │ │
-│  │(规则优先) │    │(SOP检索) │    │(查审批矩阵)  │ │
+│  │ Triage  │───▶│ SOP检索  │───▶│    Route     │ │
+│  │(规则优先) │    │(精确匹配) │    │(查审批矩阵)  │ │
 │  └─────────┘    └─────────┘    └──────────────┘ │
 │                                       │          │
 │                              ┌────────▼────────┐ │
@@ -101,10 +101,10 @@ Draft ──▶ Triaged ──▶ Retrieved ──▶ Routed ──▶ Guard Che
 |------|------|--------|
 | **Triage** | 规则优先 + LLM 兜底 | 标准路径确定性，边界场景用 LLM 判断 |
 | **Clause Extraction** | LLM 结构化输出（`条款描述` 非空时） | 从自由文本抽取风险标记，低置信度触发 HITL |
-| **RAG** | 检索 SOP/模板 | SOP 是非结构化文本，适合语义检索 |
+| **SOP 检索** | 精确 key 匹配模板 | 模板库 key 齐全、命名规范，精确匹配比向量检索更可控 |
 | **Route** | 纯代码查表（支持成熟度分流） | 审批矩阵是结构化数据，查表零成本 |
 | **Guardrail** | 纯代码条件判断 | 规则明确，不需要 LLM |
-| **HITL** | `interrupt()` + `Command(resume=...)` | LangGraph 原生支持，状态自动保存 |
+| **HITL** | `interrupt()` + `Command(resume=...)` | 高风险或低置信度节点暂停，状态自动保存 |
 | **Audit Log** | 代码写入 JSONL | append-only，不依赖 LLM |
 
 ## 数据设计
@@ -157,6 +157,14 @@ Draft ──▶ Triaged ──▶ Retrieved ──▶ Routed ──▶ Guard Che
 
 `条款描述` 为空时跳过此节点，沿用手写标记——现有确定性测试不受影响。LLM 测试需 `OPENAI_API_KEY`，无 key 时自动跳过。
 
+### 分类节点：规则优先、LLM 兜底
+
+分类节点规则优先、LLM 兜底：已知板块 × 合同类型组合直接查表；未命中时由 LLM 结构化输出分类结果与置信度。兜底路径在审计日志中以 `method="llm_fallback"` 标记，可与规则路径区分统计。
+
+### SOP 检索：为什么是精确匹配
+
+SOP 检索用精确 key 匹配而非向量检索，是选型而非省事：模板库 key 齐全、命名规范，embedding 解决的是语料没结构的问题——语料本身有结构时，引入向量只会增加不确定性。
+
 ## 运行
 
 ```bash
@@ -168,21 +176,23 @@ uv run python main.py --list                    # 列出所有合同
 uv run python main.py --contract C001           # 正常审批
 uv run python main.py --contract C002           # HITL 中断
 uv run python main.py --contract C002 --resume approved --thread demo-C002  # 恢复
-uv run pytest tests/ -v                         # 43 passed, 7 skipped
+uv run pytest tests/ -v                         # 44 passed, 8 skipped（无 API key 时）
 ```
 
 ## 设计决策
 
 ### 为什么不用纯 Agent？
 
-纯 Agent（让 LLM 自主决定每一步）在审批场景中不可靠——审批需要确定性、可审计、可回溯。用图结构固化流程，只在需要判断力的环节调用 LLM。
+审批需要确定性、可审计、可回溯，所以不能让 LLM 自由决定每一步。本项目把核心判断拆成受控的 model-tool loop：LLM 负责模糊分类和条款抽取，工具负责查表、检索、guardrail、HITL 和审计日志。
 
-### 为什么 LangGraph？
+### 为什么这里还用了 LangGraph？
 
-审批流程的本质是**有状态的确定性工作流** + **条件触发的人工介入**。LangGraph 的三个能力完美匹配：
+这版实现需要一个清楚可审计的状态外壳，所以用 LangGraph 把 6 个节点和条件边显式写出来：
 1. **图结构**：节点 + 条件边，流程显式可审计
 2. **`interrupt()`**：任意位置暂停等人工，状态自动保存
 3. **Checkpointing**：`thread_id` 作为持久指针，可跨会话恢复
+
+但面试叙事里不把 LangGraph 当成架构中心。它只是当前可读、可测的编排外壳；真正可迁移的设计是「模型判断 + 工具执行 + guardrail/HITL 收口」这一层。
 
 ### 为什么 Rule Engine + Agent？
 
@@ -213,7 +223,7 @@ contract-approval-agent/
 │   ├── tools.py           ← 工具函数（查审批矩阵、查项目、查 SOP）
 │   └── nodes/
 │       ├── triage.py      ← 分类（规则优先）
-│       ├── rag.py         ← SOP 检索
+│       ├── rag.py         ← SOP 检索（精确匹配）
 │       ├── route.py       ← 审批链路由（含成熟度分流）
 │       ├── guardrails/
 │       │   ├── counterparty_guard.py   ← 相对方资信校验
@@ -227,7 +237,7 @@ contract-approval-agent/
 │   ├── projects.jsonl
 │   └── templates/
 └── tests/
-    └── test_trajectories.py  ← 50 个 trajectory 测试（43 deterministic + 7 LLM）
+    └── test_trajectories.py  ← 52 个 trajectory 测试（44 deterministic + 8 LLM，无 key 时跳过）
 ```
 
 ## 参考信源
@@ -238,3 +248,7 @@ contract-approval-agent/
 | LangGraph HITL docs | `interrupt()` + `Command(resume=...)` 实现 |
 | OpenAI Agents SDK airline example | Triage + Handoff 模式参考 |
 | Yao et al. ICLR 2023 (ReAct) | 推理范式：Thought→Action→Observation |
+
+## 相关项目
+
+本仓库的 audit_log 由 [agent-quality-workbench](https://github.com/lesPrivilege/agent-quality-workbench) 单向只读消费——评估器不侵入被评估对象。

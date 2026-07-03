@@ -1,3 +1,5 @@
+"""初版脚手架：当前数据已手动扩展，脚本不再完整反映 14 个合同场景。"""
+
 """Generate minimal synthetic data for demo — 4 scenarios only.
 
 All data is FICTIONAL. Board names (A-D), contract types, person names,

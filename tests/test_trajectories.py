@@ -311,6 +311,33 @@ class TestBlacklistBlock:
 _has_api_key = bool(os.getenv("OPENAI_API_KEY"))
 
 
+class TestServiceSopTemplate:
+    """Service contracts should retrieve an explicit SOP template."""
+
+    def test_service_sop_found_for_c_sector(self):
+        result = _run("C005")
+        assert result["sop_missing"] is False
+        assert "服务类合同审批 SOP" in result["sop_content"]
+
+
+@pytest.mark.skipif(not _has_api_key, reason="需要真实 API key")
+class TestLLMTriageFallback:
+    """Unknown structured labels should use LLM fallback classification."""
+
+    def test_unknown_type_uses_llm_fallback(self):
+        data = _load_contract("C005")
+        data["合同类型"] = "技术服务安排"
+        config = {"configurable": {"thread_id": "test-triage-llm-fallback"}}
+        state = ContractState(contract=ContractInfo(**data))
+
+        result = _graph.invoke(state, config=config)
+
+        triage_entries = [e for e in result["audit_log"] if e.node == "triage"]
+        assert triage_entries
+        assert "方法=llm_fallback" in triage_entries[0].output_summary
+        assert result["contract"].合同类型 in {"采购类", "服务类", "工程类", "担保类", "投资合作类"}
+
+
 @pytest.mark.skipif(not _has_api_key, reason="需要真实 API key")
 class TestLLMClauseClear:
     """C012: clear clause description — LLM should extract with high confidence."""

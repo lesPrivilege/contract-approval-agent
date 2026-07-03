@@ -12,7 +12,7 @@ AUDIT_LOG_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "audit
 
 def audit_log_node(state: ContractState) -> dict:
     """Write the complete audit trail to JSONL file."""
-    start = time.time()
+    start = time.perf_counter()
 
     # Write each audit entry as a line
     AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -24,7 +24,7 @@ def audit_log_node(state: ContractState) -> dict:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     # Write summary entry
-    duration = int((time.time() - start) * 1000)
+    duration = max(1, int((time.perf_counter() - start) * 1000))
     summary = AuditEntry(
         node="audit_log",
         action="write_log",

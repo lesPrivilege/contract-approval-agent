@@ -8,13 +8,13 @@ from src.tools import get_sop
 
 def rag_node(state: ContractState) -> dict:
     """Retrieve SOP template for this contract type."""
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     sop = get_sop(contract.合同类型)
     sop_missing = sop is None
 
-    duration = int((time.time() - start) * 1000)
+    duration = max(1, int((time.perf_counter() - start) * 1000))
 
     audit = AuditEntry(
         node="rag",

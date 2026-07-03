@@ -6,10 +6,24 @@ from src.config import get_llm
 from src.state import (
     AuditEntry,
     ClauseExtraction,
-    ContractInfo,
     ContractState,
-    ContractStatus,
 )
+
+
+def _duration_ms(start: float) -> int:
+    return max(1, int((time.perf_counter() - start) * 1000))
+
+
+def _usage_from_response(response) -> dict:
+    usage = getattr(response, "usage_metadata", None) or {}
+    if not usage:
+        response_metadata = getattr(response, "response_metadata", {}) or {}
+        usage = response_metadata.get("token_usage", {}) or {}
+    return {
+        "prompt_tokens": usage.get("input_tokens") or usage.get("prompt_tokens"),
+        "completion_tokens": usage.get("output_tokens") or usage.get("completion_tokens"),
+        "total_tokens": usage.get("total_tokens"),
+    }
 
 
 def clause_extraction_node(state: ContractState) -> dict:
@@ -17,12 +31,12 @@ def clause_extraction_node(state: ContractState) -> dict:
 
     Skips if 条款描述 is empty (preserves deterministic path for existing tests).
     """
-    start = time.time()
+    start = time.perf_counter()
     contract = state.contract
 
     # Skip if no free text — keep existing hand-written flags
     if not contract.条款描述:
-        duration = int((time.time() - start) * 1000)
+        duration = _duration_ms(start)
         audit = AuditEntry(
             node="clause_extraction",
             action="skip",
@@ -37,8 +51,8 @@ def clause_extraction_node(state: ContractState) -> dict:
         }
 
     # Call LLM with structured output
-    llm = get_llm().with_structured_output(ClauseExtraction)
-    result = llm.invoke(
+    llm = get_llm().with_structured_output(ClauseExtraction, include_raw=True)
+    response = llm.invoke(
         f"请从以下合同条款描述中提取风险标记。\n\n"
         f"合同ID: {contract.id}\n"
         f"板块: {contract.板块}\n"
@@ -46,6 +60,8 @@ def clause_extraction_node(state: ContractState) -> dict:
         f"金额: {contract.金额:,}元\n\n"
         f"条款描述:\n{contract.条款描述}"
     )
+    result = response["parsed"]
+    token_usage = _usage_from_response(response.get("raw"))
 
     # Build updated contract info with LLM extraction results
     updated_contract = contract.model_copy(update={
@@ -61,7 +77,7 @@ def clause_extraction_node(state: ContractState) -> dict:
     # Check confidence
     low_confidence = result.confidence < 0.8
 
-    duration = int((time.time() - start) * 1000)
+    duration = _duration_ms(start)
 
     summary_parts = [
         f"不可逆={result.不可逆}",
@@ -79,6 +95,7 @@ def clause_extraction_node(state: ContractState) -> dict:
         output_summary=", ".join(summary_parts),
         decision="low_confidence" if low_confidence else "extracted",
         duration_ms=duration,
+        **token_usage,
     )
 
     updates = {

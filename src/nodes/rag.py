@@ -1,4 +1,4 @@
-"""RAG node — retrieve SOP/template for the contract type."""
+"""SOP retrieval node — retrieve template for the contract type by exact key match."""
 
 import time
 

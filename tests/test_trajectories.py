@@ -382,3 +382,25 @@ class TestLLMClauseBlacklist:
     def test_block_reason_blacklist(self):
         result = _run("C014")
         assert "黑名单" in result["block_reason"]
+
+
+class TestTraceOutput:
+    """Verify trace_log.jsonl is generated with well-formed entries."""
+
+    def test_trace_file_exists(self):
+        _run("C001")
+        import os
+        assert os.path.exists("data/trace_log.jsonl")
+
+    def test_trace_entries_valid(self):
+        _run("C002")
+        import os
+        valid_actions = {"reason", "tool_call", "route"}
+        with open("data/trace_log.jsonl", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                entry = json.loads(line)
+                assert "case_id" in entry
+                assert "step_idx" in entry
+                assert entry["action"] in valid_actions

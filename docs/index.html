@@ -1,30 +1,459 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Contract Approval Agent - Docs</title>
-  <style>
-    body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #333; }
-    h1 { border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
-    a { color: #0366d6; }
-    ul { list-style: none; padding: 0; }
-    li { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
-    li a { font-size: 1.1rem; }
-    .desc { color: #666; font-size: 0.9rem; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>合同审批系统 · 模拟审批演示</title>
+<meta name="description" content="合同审批系统 —— 一份合同从提交到最终结论：走到哪一步、谁需要签字、为什么被退回或拦截">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EBEEF2;
+    --panel: #FFFFFF;
+    --border: oklch(0.88 0.012 248);
+    --border-strong: oklch(0.78 0.016 248);
+    --text: oklch(0.22 0.016 250);
+    --text-2: oklch(0.42 0.018 250);
+    --text-3: oklch(0.58 0.014 250);
+    --primary: oklch(0.50 0.15 255);
+    --primary-bg: oklch(0.94 0.025 255);
+    --success: oklch(0.52 0.12 160);
+    --success-bg: oklch(0.94 0.035 160);
+    --warning: oklch(0.62 0.13 70);
+    --warning-bg: oklch(0.94 0.04 70);
+    --danger: oklch(0.54 0.16 26);
+    --danger-bg: oklch(0.94 0.03 26);
+    --gray: oklch(0.56 0.012 250);
+    --gray-bg: oklch(0.92 0.008 250);
+    --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans);
+    font-size: 14px; -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  [data-color="green"] { --c: var(--success); --c-bg: var(--success-bg); }
+  [data-color="amber"] { --c: var(--warning); --c-bg: var(--warning-bg); }
+  [data-color="red"]   { --c: var(--danger);  --c-bg: var(--danger-bg); }
+  [data-color="blue"]  { --c: var(--primary); --c-bg: var(--primary-bg); }
+  [data-color="gray"]  { --c: var(--gray);    --c-bg: var(--gray-bg); }
+
+  .page { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  .topbar { background:#fff; border-bottom:1px solid var(--border); padding:0 26px; height:60px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-shrink:0; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .brand-mark { width:34px; height:34px; border-radius:9px; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; flex-shrink:0; }
+  .brand-text { display:flex; flex-direction:column; line-height:1.3; }
+  .brand-name { font-size:16px; font-weight:600; color:var(--text); }
+  .brand-sub { font-size:12px; color:var(--text-3); }
+  .btn {
+    display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 14px; border-radius:5px;
+    font-size:12.5px; text-decoration:none; border:1px solid var(--border-strong); color:var(--text-2);
+    background:#fff; transition:.15s; white-space:nowrap;
+  }
+  .btn:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-bg); }
+
+  .layout { flex:1; display:flex; gap:16px; padding:16px 26px; min-height:0; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; min-width:0; flex-shrink:0; }
+  .panel-head {
+    padding:9px 18px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; color:var(--text); flex-shrink:0;
+  }
+  .panel-head .count { font-weight:400; color:var(--text-3); font-size:12px; }
+
+  .sidebar-panel { display:flex; flex-direction:column; min-height:0; flex:0 0 300px; }
+  .case-list { overflow-y:auto; flex:1; }
+  .group-label {
+    padding:9px 16px 5px; font-size:11px; font-weight:600; color:var(--text-3);
+    letter-spacing:.04em; background:#F0F2F5;
+  }
+  .group-label .group-count { font-weight:400; }
+  .case-row {
+    display:block; width:100%; text-align:left; background:none; border:none;
+    border-bottom:1px solid var(--border); border-left:3px solid transparent;
+    padding:9px 14px; cursor:pointer; font-family:inherit; color:var(--text);
+  }
+  .case-row:hover { background:#F3F5F8; }
+  .case-row.active { background:var(--primary-bg); border-left-color:var(--primary); }
+  .case-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+  .case-id-group { display:flex; align-items:baseline; gap:8px; }
+  .case-id { font-family:var(--font-mono); font-size:12.5px; font-weight:600; color:var(--text); }
+  .case-amount { font-family:var(--font-mono); font-size:11px; color:var(--text-3); }
+  .case-row.active .case-id { color:var(--primary); }
+  .case-desc {
+    font-size:12px; color:var(--text-2); line-height:1.5;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .case-row.no-trace .case-desc { color:var(--text-3); }
+
+  .tag {
+    display:inline-flex; align-items:center; height:21px; padding:0 8px; border-radius:4px;
+    font-size:11.5px; border:1px solid var(--c); color:var(--c); background:var(--c-bg);
+    font-weight:500; white-space:nowrap; line-height:1;
+  }
+  .tag-plain { border-color:var(--border-strong); color:var(--text-3); background:#fff; }
+  .tag-lg { height:26px; padding:0 12px; font-size:13px; font-weight:600; }
+
+  .main-col { display:flex; flex-direction:column; gap:14px; min-height:0; min-width:0; flex:1 1 0%; overflow-y:auto; }
+
+  .summary-card { padding:13px 20px; }
+  .summary-title { font-size:16px; font-weight:600; margin-bottom:4px; }
+  .summary-row { display:flex; gap:14px; padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; align-items:baseline; }
+  .summary-row:last-child { border-bottom:none; }
+  .summary-label { width:60px; flex-shrink:0; color:var(--text-3); }
+  .summary-value { flex:1; color:var(--text); line-height:1.55; }
+
+  .steps-wrap { padding:14px 20px 12px; overflow-x:auto; }
+  .steps-row { display:flex; align-items:flex-start; width:max-content; min-width:100%; }
+  .step-item { display:flex; flex-direction:column; align-items:center; width:86px; flex-shrink:0; position:relative; }
+  .step-circle {
+    width:24px; height:24px; border-radius:50%; border:2px solid var(--border-strong);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+    color:var(--text-3); background:#fff; z-index:1;
+  }
+  .step-circle[data-color] { border-color:var(--c); background:var(--c); color:#fff; }
+  .step-title { margin-top:6px; font-size:11.5px; font-weight:500; color:var(--text); text-align:center; line-height:1.3; }
+  .step-connector {
+    position:absolute; top:11px; left:calc(50% + 12px); width:calc(100% - 24px); height:2px;
+    background:var(--border-strong);
+  }
+  .step-connector[data-color] { background:var(--c); }
+  .step-connector.dashed { background-image:repeating-linear-gradient(90deg, var(--border-strong) 0 5px, transparent 5px 10px); background-color:transparent; }
+
+  .detail-panel { flex:1 1 auto; min-height:120px; display:flex; flex-direction:column; flex-shrink:1; }
+  .detail-body { flex:1; overflow-y:auto; padding:6px 20px 18px; }
+  .narr-item { display:grid; grid-template-columns:26px 1fr; column-gap:14px; }
+  .narr-rail { position:relative; display:flex; justify-content:center; }
+  .narr-rail::before { content:''; position:absolute; top:26px; bottom:-12px; width:2px; background:var(--border); }
+  .narr-item:last-child .narr-rail::before { display:none; }
+  .narr-num {
+    width:24px; height:24px; border-radius:50%; background:var(--c); color:#fff; display:flex;
+    align-items:center; justify-content:center; font-size:11.5px; font-weight:700; font-family:var(--font-mono); z-index:1; margin-top:8px;
+  }
+  .narr-content { padding:8px 0 16px; }
+  .narr-title { font-weight:600; font-size:13.5px; margin-bottom:3px; }
+  .narr-text { font-size:13px; color:var(--text-2); line-height:1.65; }
+  .narr-text b { color:var(--text); font-weight:600; }
+
+  .hitl-divider {
+    display:flex; align-items:center; gap:10px; color:var(--warning); font-weight:600;
+    font-size:11.5px; letter-spacing:.06em; margin:2px 0 6px 40px;
+  }
+  .hitl-divider::before, .hitl-divider::after { content:''; flex:1; height:1px; background:var(--warning); opacity:.35; }
+
+  .empty-state {
+    margin:16px 20px; border:1px dashed var(--border-strong); border-radius:8px; text-align:center;
+    color:var(--text-2); font-size:13px; line-height:1.9; padding:36px 26px;
+  }
+  .empty-state .tag { margin-bottom:14px; }
+
+  .footer { border-top:1px solid var(--border); background:#fff; padding:13px 26px; color:var(--text-3); font-size:12px; line-height:1.8; flex-shrink:0; }
+  .footer a { color:var(--primary); text-decoration:none; }
+  .footer a:hover { text-decoration:underline; }
+
+  @media (max-width: 900px) {
+    .layout { flex-direction:column; overflow-y:auto; }
+    .sidebar-panel { max-height:280px; flex:0 0 auto; }
+    .page { overflow-y:auto; height:auto; min-height:100vh; }
+  }
+  @media (max-width: 600px) {
+    .topbar, .layout, .footer { padding-left:14px; padding-right:14px; }
+  }
+</style>
 </head>
 <body>
-  <h1>Contract Approval Agent</h1>
-  <p>合同审批路由 Agent：结构化决策 + 分层防御。</p>
-  <ul>
-    <li>
-      <a href="llm-verification-log.md">LLM Verification Log</a>
-      <div class="desc">LLM 条款抽取验证记录，含置信度迭代过程</div>
-    </li>
-  </ul>
-  <p style="margin-top:2rem; color:#999; font-size:0.85rem;">
-    <a href="https://github.com/lesPrivilege/contract-approval-agent">GitHub Repo</a>
-  </p>
+<div class="page">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">批</div>
+      <div class="brand-text">
+        <span class="brand-name">合同审批系统</span>
+        <span class="brand-sub">模拟审批流程 · 14 份测试合同</span>
+      </div>
+    </div>
+    <a class="btn" href="https://github.com/lesPrivilege/contract-approval-agent">查看源码 ↗</a>
+  </header>
+
+  <div class="layout">
+    <div class="panel sidebar-panel">
+      <div class="panel-head">合同列表 <span class="count" id="caseCount"></span></div>
+      <div class="case-list" id="sidebar"></div>
+    </div>
+
+    <div class="main-col">
+      <div class="panel"><div id="caseHeader"></div></div>
+      <div class="panel">
+        <div class="panel-head">审批流程</div>
+        <div class="steps-wrap"><div class="steps-row" id="graphRow"></div></div>
+      </div>
+      <div class="panel detail-panel">
+        <div class="panel-head">流程详情</div>
+        <div class="detail-body" id="detailBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    以上为 14 份模拟合同的审批流程演示，数据基于真实业务规则、经脱敏合成。每份合同的审批记录均可追溯。
+    配套工具：<a href="https://lesprivilege.github.io/agent-quality-workbench/">Agent 质量评估工作台</a> · <a href="https://lesprivilege.github.io/compliance-review-agent/">合规审查系统</a> · <a href="https://github.com/lesPrivilege/contract-approval-agent">查看源码</a>
+  </footer>
+
+</div>
+
+<script src="demo-data.js"></script>
+<script>
+(function () {
+  var CATEGORY_LABEL = { approved: '已通过', hitl: '需人工审批', blocked: '已阻断' };
+  var CATEGORY_GROUP_LABEL = { approved: '正常通过', hitl: '需人工审批', blocked: '已阻断' };
+  var CATEGORY_COLOR = { approved: 'green', hitl: 'amber', blocked: 'red' };
+
+  function decisionColor(d) {
+    if (d === 'passed' || d === 'auto_approved' || d === 'approved') return 'green';
+    if (d === 'blocked' || d === 'rejected') return 'red';
+    if (d === 'missing' || d === 'not_found') return 'amber';
+    return 'blue';
+  }
+  function stepIcon(color) {
+    return { green: '✓', blue: '✓', red: '✕', amber: '!', gray: '–' }[color] || '';
+  }
+  function slotKeyOf(step) {
+    if (step.node === 'guardrail') {
+      var action = step.action === 'check_project_budget' ? 'check_project' : step.action;
+      return 'guardrail:' + action;
+    }
+    return step.node;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function fmtAmount(n) { return n == null ? '' : '¥' + Number(n).toLocaleString('zh-CN'); }
+  function fmtWan(n) {
+    if (n == null) return '';
+    if (n % 10000 === 0) return '¥' + (n / 10000) + '万';
+    return '¥' + (Math.round(n / 1000) / 10) + '万';
+  }
+  function tag(text, color, opts) {
+    opts = opts || {};
+    var cls = 'tag' + (color ? '' : ' tag-plain') + (opts.lg ? ' tag-lg' : '');
+    return '<span class="' + cls + '"' + (color ? ' data-color="' + color + '"' : '') + '>' + esc(text) + '</span>';
+  }
+
+  // ---- output_summary -> business narrative ----
+  function triageNarrative(step) {
+    var m = step.output_summary.match(/板块=([^,]+), 类型=([^,]+), 方法=([^,]+)(?:, 置信度=([\d.]+))?/);
+    if (m) {
+      var methodLabel = m[3] === 'rule' ? '规则匹配' : ('智能识别' + (m[4] ? '，置信度 ' + Math.round(parseFloat(m[4]) * 100) + '%' : ''));
+      return m[2] + ' · ' + m[1] + '板块（' + methodLabel + '）';
+    }
+    return step.output_summary;
+  }
+  function clauseNarrative(step) {
+    if (step.output_summary === '沿用已有标记') return '无需识别（条款已有结构化标记）';
+    var confM = step.output_summary.match(/置信度[=:]\s*([\d.]+)/);
+    if (confM) {
+      var flags = [];
+      ['不可逆', '担保', '跨业务', '关联方'].forEach(function (f) {
+        if (new RegExp(f + '\\s*[=:]\\s*True').test(step.output_summary)) flags.push(f);
+      });
+      var pct = Math.round(parseFloat(confM[1]) * 100);
+      return flags.length ? ('识别到风险条款：' + flags.join('、') + '（置信度 ' + pct + '%）') : ('未识别到风险条款（置信度 ' + pct + '%）');
+    }
+    return step.output_summary;
+  }
+  function ragNarrative(step) {
+    if (step.output_summary.indexOf('已检索') >= 0) return '已匹配标准操作流程';
+    if (step.output_summary.indexOf('未找到') >= 0) return '未匹配到标准操作流程，按经验处理';
+    return step.output_summary;
+  }
+  function routeNarrative(step) {
+    return step.output_summary.replace('审批链: ', '审批链：');
+  }
+  function guardrailNarrative(step) {
+    var s = step.output_summary;
+    if (s === '通过') return '✓ 通过';
+    if (s.indexOf('黑名单') >= 0) return '✕ 相对方在黑名单中，合同不予受理';
+    if (s.indexOf('项目未通过') >= 0) return '✕ 关联项目未通过评审，合同暂不受理';
+    if (s.indexOf('超预算') >= 0) return '✕ 合同金额超出项目预算上限';
+    if (s === '项目已通过，预算合规') return '✓ 关联项目已通过评审，合同金额在预算范围内';
+    if (s.indexOf('需合规审查') >= 0) return '✕ 存在跨板块业务冲突，需合规审查后才能继续';
+    return s;
+  }
+  function hitlNarrative(step) {
+    if (step.action === 'auto_approve') return '系统自动通过（无需人工审批）';
+    if (step.decision === 'approved') return '人工审批通过';
+    if (step.decision === 'rejected') return '人工审批驳回';
+    return step.output_summary;
+  }
+
+  var sidebarEl = document.getElementById('sidebar');
+  var caseCountEl = document.getElementById('caseCount');
+  var caseHeaderEl = document.getElementById('caseHeader');
+  var graphRowEl = document.getElementById('graphRow');
+  var detailBodyEl = document.getElementById('detailBody');
+  var selectedId = null;
+
+  var NODES = [
+    { key: '__start',                      title: '合同提交' },
+    { key: 'triage',                        title: '合同分类' },
+    { key: 'clause_extraction',             title: '条款识别' },
+    { key: 'rag',                           title: '流程指引' },
+    { key: 'route',                         title: '审批链确定' },
+    { key: 'guardrail:check_counterparty',  title: '相对方审查' },
+    { key: 'guardrail:check_project',       title: '项目合规审查' },
+    { key: 'guardrail:check_isolation',     title: '业务隔离审查' },
+    { key: 'hitl',                          title: '人工审批' },
+    { key: '__end',                         title: '归档' }
+  ];
+
+  function caseRowHtml(c) {
+    var badge = c.hasTrace ? tag(CATEGORY_LABEL[c.category], CATEGORY_COLOR[c.category]) : tag('复杂场景', null);
+    return '' +
+      '<button class="case-row' + (c.hasTrace ? '' : ' no-trace') + '" data-id="' + c.id + '">' +
+        '<div class="case-row-top"><div class="case-id-group"><span class="case-id">' + c.id + '</span>' +
+        (c.金额 != null ? '<span class="case-amount">' + fmtWan(c.金额) + '</span>' : '') + '</div>' + badge + '</div>' +
+        '<div class="case-desc">' + esc(c.说明 || '') + '</div>' +
+      '</button>';
+  }
+
+  function renderSidebar() {
+    caseCountEl.textContent = CONTRACTS.length;
+    var groups = [
+      { label: CATEGORY_GROUP_LABEL.approved, items: CONTRACTS.filter(function (c) { return c.hasTrace && c.category === 'approved'; }) },
+      { label: CATEGORY_GROUP_LABEL.hitl, items: CONTRACTS.filter(function (c) { return c.hasTrace && c.category === 'hitl'; }) },
+      { label: CATEGORY_GROUP_LABEL.blocked, items: CONTRACTS.filter(function (c) { return c.hasTrace && c.category === 'blocked'; }) },
+      { label: '复杂场景', items: CONTRACTS.filter(function (c) { return !c.hasTrace; }) }
+    ];
+    var html = '';
+    groups.forEach(function (g) {
+      if (!g.items.length) return;
+      html += '<div class="group-label">' + g.label + ' <span class="group-count">' + g.items.length + '</span></div>';
+      g.items.forEach(function (c) { html += caseRowHtml(c); });
+    });
+    sidebarEl.innerHTML = html;
+    sidebarEl.querySelectorAll('.case-row').forEach(function (row) {
+      row.addEventListener('click', function () { selectCase(row.getAttribute('data-id'), true); });
+    });
+  }
+
+  function markActive() {
+    sidebarEl.querySelectorAll('.case-row').forEach(function (row) {
+      row.classList.toggle('active', row.getAttribute('data-id') === selectedId);
+    });
+  }
+
+  function renderSummaryCard(c) {
+    var html = '<div class="summary-card">';
+    html += '<div class="summary-title">' + c.id + ' · ' + esc(c.板块 || '') + '板块 · ' + esc(c.合同类型 || '') + '</div>';
+    html += '<div class="summary-row"><span class="summary-label">金额</span><span class="summary-value">' + (c.金额 != null ? fmtAmount(c.金额) : '—') + '</span></div>';
+    html += '<div class="summary-row"><span class="summary-label">发起人</span><span class="summary-value">' + esc(c.发起人 || '—') + '</span></div>';
+    html += '<div class="summary-row"><span class="summary-label">说明</span><span class="summary-value">' + esc(c.说明 || '') + '</span></div>';
+    if (c.hasTrace) {
+      html += '<div class="summary-row"><span class="summary-label">结果</span><span class="summary-value">' + tag(CATEGORY_LABEL[c.category], CATEGORY_COLOR[c.category]) + '</span></div>';
+    } else {
+      html += '<div class="summary-row"><span class="summary-label">状态</span><span class="summary-value">' + tag('复杂场景 · 暂无记录', null) + '</span></div>';
+    }
+    html += '</div>';
+    caseHeaderEl.innerHTML = html;
+  }
+
+  function findStep(trace, key) { return trace.filter(function (s) { return slotKeyOf(s) === key; })[0]; }
+
+  function stepColor(node, step) {
+    if (node.key === '__start' || node.key === '__end') return 'blue';
+    if (!step) return null;
+    if (step.node === 'hitl') return step.action === 'human_review' ? (step.decision === 'rejected' ? 'red' : 'green') : 'green';
+    return decisionColor(step.decision);
+  }
+
+  function renderGraph(c) {
+    var trace = TRACE[c.id];
+    var nodes = NODES.map(function (n) { return { key: n.key, title: n.title, _step: trace ? findStep(trace, n.key) : null }; });
+    var html = '';
+    nodes.forEach(function (node, i) {
+      var reached = (node.key === '__start' || node.key === '__end') ? !!trace : !!node._step;
+      var color = reached ? stepColor(node, node._step) : null;
+      html += '<div class="step-item">';
+      if (i > 0) {
+        var prevReached = nodes[i - 1].key === '__start' ? !!trace : !!nodes[i - 1]._step;
+        html += '<div class="step-connector' + ((prevReached && reached) ? '' : ' dashed') + '"' + ((prevReached && reached && color) ? ' data-color="' + color + '"' : '') + '></div>';
+      }
+      html += '<div class="step-circle"' + (color ? ' data-color="' + color + '"' : '') + '>' + (color ? stepIcon(color) : '') + '</div>';
+      html += '<div class="step-title">' + node.title + '</div>';
+      html += '</div>';
+    });
+    graphRowEl.innerHTML = html;
+  }
+
+  function renderDetail(c) {
+    var trace = TRACE[c.id];
+    if (!trace) {
+      detailBodyEl.innerHTML = '' +
+        '<div class="empty-state">' +
+          tag('复杂场景 · 暂无记录', null) +
+          '<div>该合同需要系统从条款描述中智能识别风险点（' + esc(c.说明 || '') + '），涉及真实模型调用，静态演示无法回放。完整测试覆盖见源码。</div>' +
+        '</div>';
+      return;
+    }
+    var items = [];
+    items.push({ title: '合同提交', text: c.发起人 ? ('由 ' + c.发起人 + ' 提交，进入审批流程') : '合同已提交，进入审批流程', color: 'blue' });
+    trace.forEach(function (step) {
+      if (step.node === 'triage') items.push({ title: '合同分类', text: triageNarrative(step), color: decisionColor(step.decision) });
+      else if (step.node === 'clause_extraction') items.push({ title: '条款识别', text: clauseNarrative(step), color: step.decision === 'skipped' ? 'gray' : decisionColor(step.decision) });
+      else if (step.node === 'rag') items.push({ title: '流程指引检索', text: ragNarrative(step), color: decisionColor(step.decision) });
+      else if (step.node === 'route') items.push({ title: '审批链确定', text: routeNarrative(step), color: decisionColor(step.decision) });
+      else if (step.node === 'guardrail') {
+        var title = step.action === 'check_counterparty' ? '相对方审查' : (step.action === 'check_isolation' ? '业务隔离审查' : '项目合规审查');
+        items.push({ title: title, text: guardrailNarrative(step), color: decisionColor(step.decision) });
+      } else if (step.node === 'hitl') {
+        var isHuman = step.action === 'human_review';
+        items.push({ title: '人工审批', text: hitlNarrative(step), color: isHuman ? (step.decision === 'rejected' ? 'red' : 'green') : 'green', divider: isHuman });
+      }
+    });
+    items.push({ title: '归档', text: '全流程记录已存档，可追溯', color: 'blue' });
+
+    var html = '';
+    items.forEach(function (item) {
+      if (item.divider) html += '<div class="hitl-divider"><span>以下由人工判断</span></div>';
+      html += '<div class="narr-item" data-color="' + item.color + '">' +
+        '<div class="narr-rail"><div class="narr-num">' + (items.indexOf(item) + 1) + '</div></div>' +
+        '<div class="narr-content">' +
+          '<div class="narr-title">' + item.title + '</div>' +
+          '<div class="narr-text">' + esc(item.text) + '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    detailBodyEl.innerHTML = html;
+  }
+
+  function selectCase(id, updateHash) {
+    var c = CONTRACTS.filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    selectedId = id;
+    markActive();
+    renderSummaryCard(c);
+    renderGraph(c);
+    renderDetail(c);
+    if (updateHash) history.replaceState(null, '', '#' + id);
+  }
+
+  renderSidebar();
+  var initial = (location.hash || '').replace('#', '');
+  if (!CONTRACTS.some(function (c) { return c.id === initial; })) initial = CONTRACTS[0].id;
+  selectCase(initial, false);
+
+  window.addEventListener('hashchange', function () {
+    var id = (location.hash || '').replace('#', '');
+    if (CONTRACTS.some(function (c) { return c.id === id; })) selectCase(id, false);
+  });
+})();
+</script>
 </body>
 </html>

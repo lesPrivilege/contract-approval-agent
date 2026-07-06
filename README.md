@@ -12,6 +12,8 @@
 
 > **配套项目**：本项目是三个项目之一——`compliance-review-agent`（合规审查，RAG+推理）展示知识密集型场景的互补架构，`agent-quality-workbench`（PM 侧评估工具）提供立项评分和跨 agent 质量仪表盘。
 
+> **在线预览**：[GitHub Pages](https://lesprivilege.github.io/contract-approval-agent/)（verification log）
+
 ## 宏观逻辑
 
 ### 合同审批全流程
